@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Tournée du Moyen Atlas</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root{--g1:#1B4332;--g2:#2D6A4F;--g3:#52B788;--cr:#F0F7F4;--br:#7F4F24;--rd:#8B1A1A;--bl:#1B4965;--bg:#f8faf9}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif}
+#map{width:100%;height:100vh}
+
+/* Panel */
+.pnl{position:absolute;top:10px;left:10px;z-index:1000;background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.18);width:310px;max-height:calc(100vh - 20px);display:flex;flex-direction:column;overflow:hidden;transition:width .3s}
+.pnl.collapsed{width:52px}
+.pnl-head{background:linear-gradient(135deg,var(--g1),var(--g2));color:#fff;padding:12px 14px;display:flex;align-items:center;gap:10px;cursor:pointer;flex-shrink:0}
+.pnl-head h1{font-size:14px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden}
+.pnl-head .toggle{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;transition:transform .3s}
+.pnl.collapsed .toggle{transform:rotate(180deg)}
+.pnl.collapsed .pnl-body{display:none}
+.pnl-body{display:flex;flex-direction:column;flex:1;overflow:hidden}
+
+/* Tabs */
+.tabs{display:flex;flex-shrink:0;border-bottom:1px solid #eee}
+.tab{flex:1;padding:9px;text-align:center;font-size:11px;font-weight:600;cursor:pointer;color:#aaa;border-bottom:2px solid transparent;transition:all .2s}
+.tab:hover{color:var(--g2)}
+.tab.on{color:var(--g2);border-color:var(--g2)}
+
+/* Filters */
+.flt{padding:8px 10px;display:flex;gap:4px;flex-wrap:wrap;flex-shrink:0}
+.fbtn{padding:4px 10px;border:2px solid var(--g2);border-radius:16px;background:#fff;color:var(--g2);font-size:10px;font-weight:700;cursor:pointer;transition:all .15s}
+.fbtn:hover,.fbtn.on{background:var(--g2);color:#fff}
+.fbtn[data-d="0"]{border-color:#444;color:#444}
+.fbtn[data-d="0"]:hover,.fbtn[data-d="0"].on{background:#444;color:#fff}
+
+/* List */
+.lst{overflow-y:auto;flex:1}
+.si{padding:9px 12px;border-bottom:1px solid #f5f5f5;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .12s}
+.si:hover{background:var(--cr)}
+.si.act{background:#e0f2e9;border-left:3px solid var(--g2)}
+.si.sub{padding-left:38px;opacity:.8}
+.sn{min-width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0}
+.si h3{font-size:11.5px;font-weight:600;color:#1a1a2e;line-height:1.25}
+.si p{font-size:9.5px;color:#999;margin-top:1px}
+
+/* Route cards */
+.rc{padding:10px 12px;border-bottom:1px solid #f0f0f0;cursor:pointer;display:flex;align-items:center;gap:10px;transition:background .12s}
+.rc:hover{background:#f5f9f7}
+.rc .ri{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.rc h4{font-size:11px;font-weight:600;color:#1a1a2e}
+.rc p{font-size:9px;color:#999;margin-top:1px}
+.rc .dst{font-size:12px;font-weight:700;color:var(--g2);margin-top:2px}
+.rtot{padding:10px;background:var(--cr);text-align:center;font-size:12px;font-weight:700;color:var(--g1);flex-shrink:0}
+
+/* Flythrough button */
+.fly-bar{padding:8px 10px;border-top:1px solid #eee;flex-shrink:0;display:flex;gap:6px}
+.fly-btn{flex:1;padding:7px;border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;transition:all .2s}
+.fly-btn.primary{background:var(--g2);color:#fff}
+.fly-btn.primary:hover{background:var(--g1)}
+.fly-btn.secondary{background:#f0f0f0;color:#555}
+.fly-btn.secondary:hover{background:#e0e0e0}
+.fly-btn:disabled{opacity:.4;cursor:default}
+
+/* Floating controls */
+.ctrl-group{position:absolute;z-index:1000;display:flex;flex-direction:column;gap:6px}
+.ctrl-group.right{right:10px;bottom:30px}
+.cbtn{width:40px;height:40px;border-radius:12px;background:#fff;border:none;box-shadow:0 2px 12px rgba(0,0,0,.18);cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.cbtn:hover{transform:scale(1.08);box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.cbtn.active{background:var(--g2);color:#fff;animation:glow 2s infinite}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(45,106,79,.3)}50%{box-shadow:0 0 0 10px rgba(45,106,79,0)}}
+
+/* Distance display */
+.dist-display{position:absolute;z-index:1000;right:10px;top:10px;background:#fff;border-radius:12px;box-shadow:0 3px 16px rgba(0,0,0,.15);padding:8px 14px;display:none;text-align:center}
+.dist-display.show{display:block}
+.dist-display .label{font-size:9px;color:#999;text-transform:uppercase;letter-spacing:.5px}
+.dist-display .val{font-size:20px;font-weight:800;color:var(--g2)}
+.dist-display .unit{font-size:10px;color:#888}
+
+/* Elevation mini */
+.elev{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:900;background:rgba(255,255,255,.92);border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.12);padding:6px 10px;display:none;backdrop-filter:blur(8px)}
+.elev.show{display:flex;align-items:flex-end;gap:2px}
+.elev .bar{width:18px;border-radius:3px 3px 0 0;background:var(--g2);transition:all .3s;cursor:pointer;position:relative;min-height:4px}
+.elev .bar:hover{background:var(--g1)}
+.elev .bar .tip{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:2px 6px;border-radius:4px;font-size:9px;white-space:nowrap}
+.elev .bar:hover .tip{display:block}
+
+/* Popup */
+.pp{min-width:240px;max-width:280px}
+.pp-h{background:linear-gradient(135deg,var(--g1),var(--g2));color:#fff;padding:8px 12px;margin:-12px -12px 8px;border-radius:4px 4px 0 0}
+.pp-h h3{font-size:13px;font-weight:700}
+.pp-h span{font-size:9px;opacity:.75}
+.pp-b{font-size:11px;color:#444;line-height:1.5}
+.pp-b strong{color:var(--g1)}
+.pp-f{margin-top:6px;padding-top:5px;border-top:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+.pp-f .coords{font-size:8.5px;color:#bbb}
+.pp-f a{font-size:9px;color:var(--g2);font-weight:600;text-decoration:none}
+.pp-f a:hover{text-decoration:underline}
+.pp-nav{display:flex;gap:4px;margin-top:6px}
+.pp-nav button{flex:1;padding:5px;border:1px solid var(--g2);border-radius:5px;background:#fff;color:var(--g2);font-size:9px;font-weight:600;cursor:pointer;transition:all .15s}
+.pp-nav button:hover{background:var(--g2);color:#fff}
+
+@media(max-width:700px){
+  .pnl{width:calc(100% - 16px);max-height:38vh;bottom:8px;top:auto;left:8px}
+  .pnl.collapsed{width:calc(100% - 16px);max-height:52px}
+  .ctrl-group.right{top:10px;bottom:auto}
+  .dist-display{top:60px}
+  .elev{bottom:auto;top:10px;left:60px;transform:none}
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div class="pnl" id="panel">
+  <div class="pnl-head" onclick="togglePanel()">
+    <h1>Tournee du Moyen Atlas</h1>
+    <div class="toggle" id="toggleIcon">◀</div>
+  </div>
+  <div class="pnl-body">
+    <div class="tabs">
+      <div class="tab on" data-t="stops" onclick="setTab('stops')">Arrets</div>
+      <div class="tab" data-t="routes" onclick="setTab('routes')">Itineraire</div>
+    </div>
+    <div class="flt" id="fltBox"></div>
+    <div class="lst" id="content"></div>
+    <div class="fly-bar" id="flyBar">
+      <button class="fly-btn primary" id="flyBtn" onclick="startFlythrough()">Survoler la tournee</button>
+      <button class="fly-btn secondary" id="stopBtn" onclick="stopFlythrough()" style="display:none">Stop</button>
+    </div>
+  </div>
+</div>
+
+<div class="ctrl-group right">
+  <button class="cbtn" id="gpsBtn" onclick="toggleGPS()" title="Ma position">📍</button>
+  <button class="cbtn" id="mapBtn" onclick="toggleMap()" title="Vue satellite">🛰️</button>
+  <button class="cbtn" id="elevBtn" onclick="toggleElev()" title="Profil altitudinal">📊</button>
+</div>
+
+<div class="dist-display" id="distBox">
+  <div class="label">Prochain arret</div>
+  <div class="val" id="distVal">-</div>
+  <div class="unit" id="distName"></div>
+</div>
+
+<div class="elev" id="elevBar"></div>
+
+<script>
+// ══════════ DATA ══════════
+const S=[
+{d:1,t:"m",id:"01",n:"Foret de Jaaba",la:33.685,lo:-5.15,al:1355,c:"#2D6A4F",
+ s:"Chenaie verte et zenaie, 10 000 ha",
+ f:"<strong>10 000 ha</strong> entre El Hajeb et Ifrane<br>Etage meso-mediterraneen, subhumide a humide<br>6 groupements vegetaux, 50% en stade regressif<br>Essences : chene vert + chene zeen<br>Deperissement du chene zeen observe"},
+{d:1,t:"s",id:"01a",n:"Canton Sidi Aissa",la:33.72,lo:-5.18,al:1330,c:"#D4A373",
+ s:"Chene vert pur, alt. 1 230 a 1 430 m",f:"Serie thermo-mediterraneenne<br>Degradation avancee, doum abondant"},
+{d:1,t:"s",id:"01b",n:"Canton Jaaba",la:33.675,lo:-5.148,al:1490,c:"#D4A373",
+ s:"Chenaie et zenaie, alt. 1 360 a 1 616 m",f:"Chene vert + chene zeen<br>Deperissement foliaire observe"},
+{d:1,t:"m",id:"02",n:"Pinede de Tamrabta",la:33.4,lo:-5.1,al:1550,c:"#2D6A4F",
+ s:"Pin maritime endemique, 2 070 ha",
+ f:"<strong>2 070 ha</strong> de Pinus pinaster<br>Foret Jbel Aoua Sud, Parc d'Ifrane<br>Incendie 2001 : 1 600 ha detruits<br>Substrat dolomie calcaire filtrante"},
+{d:1,t:"s",id:"02a",n:"Zone brulee (2001)",la:33.41,lo:-5.09,al:1550,c:"#D4A373",
+ s:"1 600 ha, comptage comparatif",f:"Zone devastee, regeneration post-feu a evaluer"},
+{d:2,t:"m",id:"03",n:"DPANEF Khenifra",la:32.935,lo:-5.67,al:870,c:"#1B4965",
+ s:"Direction Provinciale, briefing",f:"Briefing sur le Parc National de Khenifra<br>Strategies de gestion forestiere"},
+{d:2,t:"m",id:"04",n:"Foret recreative Arougou",la:32.97,lo:-5.36,al:1600,c:"#1B4965",
+ s:"Ecotourisme, 5 ha, source perenne",f:"Commune Aklim Azegza, Parc de Khenifra<br>Source perenne entouree de cedraie<br>Projet Forets du Maroc 2020-2030"},
+{d:2,t:"m",id:"05",n:"Foret d'Ajdir",la:32.954,lo:-5.349,al:1800,c:"#1B4965",
+ s:"Cedraie sur causse, 24 516 ha",
+ f:"<strong>24 516 ha</strong>, Patrimoine National<br>Cedres jusqu'a 1 200 ans, 40 a 60 m<br>4 series d'amenagement<br>Regeneration : 35% objectif, 45% echec<br>Substrat calcaire = difficulte"},
+{d:2,t:"s",id:"05c",n:"Parcelle experimentale 2023",la:32.96,lo:-5.34,al:1700,c:"#D4A373",
+ s:"Plantation cedre, mise en defens",f:"Semis 2021, plantation mars 2023<br>Cloture barbelee + branches epineuses"},
+{d:3,t:"m",id:"06",n:"Cedraie Sidi M'Guild",la:33.216,lo:-5.27,al:1900,c:"#7F4F24",
+ s:"RBCA, 29 732 ha, 10 groupements",
+ f:"<strong>29 732 ha</strong>, Reserve de Biosphere<br>10 groupements vegetaux, 131 especes<br>Cedre : 92 t/ha, G=7,85 m2/ha<br>Surpaturage 86,7%<br>292 M DH de recettes (2001-2016)"},
+{d:3,t:"s",id:"06b",n:"Ain Kahla",la:33.238,lo:-5.219,al:1800,c:"#D4A373",
+ s:"Deperissement maximal, singe magot",f:"Ecorcage intense par le singe magot<br>Secteur le plus touche"},
+{d:3,t:"s",id:"06c",n:"Afennourir (RAMSAR)",la:33.261,lo:-5.288,al:1800,c:"#D4A373",
+ s:"Zone humide de priorite 1",f:"Site RAMSAR, zone humide continentale<br>Tanche, gardon, brochet"},
+{d:3,t:"m",id:"07",n:"Cedraie de Sehb",la:33.235,lo:-5.245,al:1700,c:"#7F4F24",
+ s:"Cedraie pure sur basalte, arret cle",
+ f:"<strong>Arret pedagogique cle</strong><br>Canton Sehb, CCDRF d'Azrou<br>Basalte = regeneration dynamique<br>Validation du gradient substrat"},
+{d:4,t:"m",id:"08",n:"Foret de Ras El Ma",la:33.83,lo:-4.83,al:1400,c:"#8B1A1A",
+ s:"Defoliateurs, singe magot",
+ f:"Pres de Sefrou, cedres et chenes verts<br>Chenille processionnaire, tordeuse<br>Traitements : Dimilin, Bt, Foray 48B"},
+{d:4,t:"m",id:"09",n:"Cedraie d'Azrou",la:33.44,lo:-5.22,al:1700,c:"#8B1A1A",
+ s:"Basalte, regeneration dynamique",
+ f:"Parc National d'Ifrane<br>Confirmation du gradient substrat<br>Plantation reussie de 30 ans"},
+{d:4,t:"s",id:"09a",n:"Plantation reussie 30 ans",la:33.435,lo:-5.215,al:1650,c:"#D4A373",
+ s:"Succes par respect de la provenance",f:"Adaptation ecotypique<br>Graines locales, terreau adapte"},
+{d:4,t:"m",id:"10",n:"Station semences Azrou",la:33.435,lo:-5.225,al:1500,c:"#8B1A1A",
+ s:"15 sites cedre, grainotheque",
+ f:"Station regionale (1991)<br>Cooperation Maroc-Allemagne<br>15 sites cedre, 5 pin maritime<br>Grainotheque, tracabilite complete"},
+];
+
+const DY=[{n:1,l:"Jour 1",c:"#2D6A4F"},{n:2,l:"Jour 2",c:"#1B4965"},{n:3,l:"Jour 3",c:"#7F4F24"},{n:4,l:"Jour 4",c:"#8B1A1A"}];
+const MS=S.filter(s=>s.t==='m');
+
+// ══════════ MAP ══════════
+const t1=L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{attribution:'CartoDB',maxZoom:19});
+const t2=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'Esri',maxZoom:19});
+let tileMode=0;
+const map=L.map('map',{zoomControl:false,zoomAnimation:true}).setView([33.15,-5.2],8);
+t1.addTo(map);
+L.control.zoom({position:'topright'}).addTo(map);
+L.control.scale({imperial:false,position:'bottomright'}).addTo(map);
+
+function toggleMap(){
+  if(tileMode===0){map.removeLayer(t1);t2.addTo(map);tileMode=1;document.getElementById('mapBtn').textContent='🗺️';}
+  else{map.removeLayer(t2);t1.addTo(map);tileMode=0;document.getElementById('mapBtn').textContent='🛰️';}
+}
+
+// ══════════ LAYERS ══════════
+const dGrp={};DY.forEach(d=>{dGrp[d.n]=L.layerGroup().addTo(map)});
+const mkrs={};let activeStop=null;
+
+function mkIc(color,sz,lbl){
+  return L.divIcon({className:'',iconSize:[sz*2,sz*2],iconAnchor:[sz,sz],popupAnchor:[0,-sz],
+    html:`<div style="width:${sz*2}px;height:${sz*2}px;position:relative">
+      <div style="width:100%;height:100%;background:${color};border:2.5px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.35)"></div>
+      ${lbl?`<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:${sz>12?'9':'7'}px;font-weight:800">${lbl}</span>`:''}</div>`});
+}
+
+// Add markers
+S.forEach((s,idx)=>{
+  const isM=s.t==='m';
+  const dy=DY.find(d=>d.n===s.d);
+  const mIdx=MS.findIndex(m=>m.id===s.id);
+  const prev=mIdx>0?MS[mIdx-1]:null;
+  const next=mIdx<MS.length-1?MS[mIdx+1]:null;
+
+  let nav='';
+  if(isM&&mIdx>=0){
+    nav=`<div class="pp-nav">
+      ${prev?`<button onclick="flyTo('${prev.id}')">Precedent</button>`:''}
+      ${next?`<button onclick="flyTo('${next.id}')">Suivant</button>`:''}
+    </div>`;
+  }
+
+  const pp=`<div class="pp">
+    <div class="pp-h"><h3>${s.n}</h3><span>${dy.l} | ${s.al} m</span></div>
+    <div class="pp-b">${s.f}</div>
+    <div class="pp-f">
+      <span class="coords">${s.la.toFixed(4)}N, ${Math.abs(s.lo).toFixed(4)}W</span>
+      ${isM?`<a href="https://www.google.com/maps/dir/?api=1&destination=${s.la},${s.lo}" target="_blank">Naviguer</a>`:''}
+    </div>
+    ${nav}
+  </div>`;
+
+  const m=L.marker([s.la,s.lo],{icon:mkIc(isM?s.c:'#D4A373',isM?15:9,isM?s.id:'')})
+    .bindPopup(pp,{maxWidth:300}).on('click',()=>{setActive(s.id)});
+  m.addTo(dGrp[s.d]);
+  mkrs[s.id]={m,s};
+});
+
+// Routes with animated dashes
+DY.forEach(d=>{
+  const pts=S.filter(s=>s.d===d.n&&s.t==='m').map(s=>[s.la,s.lo]);
+  if(pts.length>1) L.polyline(pts,{color:d.c,weight:3.5,opacity:.65,dashArray:'8,8'}).addTo(dGrp[d.n]);
+});
+
+// ══════════ INTERACTIONS ══════════
+let curTab='stops',curDay=0,flying=false,flyTimer=null;
+
+function togglePanel(){
+  document.getElementById('panel').classList.toggle('collapsed');
+  const ic=document.getElementById('toggleIcon');
+  ic.textContent=document.getElementById('panel').classList.contains('collapsed')?'▶':'◀';
+}
+
+function setTab(t){
+  curTab=t;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.dataset.t===t));
+  document.getElementById('fltBox').style.display=t==='stops'?'flex':'none';
+  document.getElementById('flyBar').style.display=t==='stops'?'flex':'none';
+  render();
+}
+
+function setDay(d){
+  curDay=d;
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.toggle('on',+b.dataset.d===d));
+  DY.forEach(dy=>{if(d===0||d===dy.n)map.addLayer(dGrp[dy.n]);else map.removeLayer(dGrp[dy.n])});
+  render();
+  if(d>0){
+    const pts=S.filter(s=>s.d===d).map(s=>[s.la,s.lo]);
+    if(pts.length)map.fitBounds(pts,{padding:[60,340],maxZoom:11});
+  }else map.flyTo([33.15,-5.2],8,{duration:.8});
+}
+
+function flyTo(id){
+  const o=mkrs[id];
+  if(!o)return;
+  setActive(id);
+  map.flyTo([o.s.la,o.s.lo],12,{duration:1});
+  setTimeout(()=>o.m.openPopup(),1100);
+}
+
+function setActive(id){
+  activeStop=id;
+  document.querySelectorAll('.si').forEach(el=>el.classList.toggle('act',el.dataset.id===id));
+  // Scroll into view
+  const el=document.querySelector(`.si[data-id="${id}"]`);
+  if(el)el.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+// ══════════ FLYTHROUGH ══════════
+function startFlythrough(){
+  if(flying)return;
+  flying=true;
+  document.getElementById('flyBtn').style.display='none';
+  document.getElementById('stopBtn').style.display='block';
+  let i=0;
+  const pts=MS;
+  function step(){
+    if(!flying||i>=pts.length){stopFlythrough();return}
+    const s=pts[i];
+    setDay(0);
+    setActive(s.id);
+    map.flyTo([s.la,s.lo],12,{duration:1.5});
+    setTimeout(()=>{if(flying)mkrs[s.id].m.openPopup()},1600);
+    i++;
+    flyTimer=setTimeout(step,4000);
+  }
+  map.closePopup();
+  step();
+}
+
+function stopFlythrough(){
+  flying=false;
+  if(flyTimer)clearTimeout(flyTimer);
+  document.getElementById('flyBtn').style.display='block';
+  document.getElementById('stopBtn').style.display='none';
+}
+
+// ══════════ GPS ══════════
+let gpsOn=false,gpsWatch=null,gpsMkr=null;
+function toggleGPS(){
+  const btn=document.getElementById('gpsBtn');
+  if(!gpsOn){
+    if(!navigator.geolocation){alert("GPS non disponible");return}
+    gpsOn=true;btn.classList.add('active');
+    document.getElementById('distBox').classList.add('show');
+    gpsWatch=navigator.geolocation.watchPosition(p=>{
+      const{latitude:la,longitude:lo}=p.coords;
+      if(!gpsMkr){
+        gpsMkr=L.circleMarker([la,lo],{radius:7,fillColor:'#4285f4',fillOpacity:1,color:'#fff',weight:2.5})
+          .bindPopup('Ma position').addTo(map);
+        map.setView([la,lo],13);
+      }else gpsMkr.setLatLng([la,lo]);
+      let best=Infinity,bst=null;
+      MS.forEach(s=>{const d=hav(la,lo,s.la,s.lo);if(d<best){best=d;bst=s}});
+      document.getElementById('distVal').textContent=best<1?Math.round(best*1000)+' m':best.toFixed(1)+' km';
+      document.getElementById('distName').textContent=bst?'vers '+bst.n:'';
+    },e=>alert("Erreur GPS"),{enableHighAccuracy:true,maximumAge:5000});
+  }else{
+    gpsOn=false;btn.classList.remove('active');
+    document.getElementById('distBox').classList.remove('show');
+    if(gpsWatch)navigator.geolocation.clearWatch(gpsWatch);
+    if(gpsMkr){map.removeLayer(gpsMkr);gpsMkr=null}
+  }
+}
+
+function hav(a,b,c,d){
+  const R=6371,dL=(c-a)*Math.PI/180,dO=(d-b)*Math.PI/180;
+  const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dO/2)**2;
+  return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+// ══════════ ELEVATION ══════════
+let elevOn=false;
+function toggleElev(){
+  elevOn=!elevOn;
+  document.getElementById('elevBtn').classList.toggle('active',elevOn);
+  const bar=document.getElementById('elevBar');
+  if(elevOn){
+    bar.classList.add('show');
+    const maxAl=Math.max(...MS.map(s=>s.al));
+    bar.innerHTML=MS.map(s=>{
+      const h=Math.max(8,Math.round(s.al/maxAl*60));
+      const dy=DY.find(d=>d.n===s.d);
+      return`<div class="bar" style="height:${h}px;background:${dy.c}" onclick="flyTo('${s.id}')">
+        <div class="tip">${s.id} ${s.n} (${s.al} m)</div>
+      </div>`;
+    }).join('');
+  }else bar.classList.remove('show');
+}
+
+// ══════════ RENDER ══════════
+function render(){
+  const ct=document.getElementById('content');
+  if(curTab==='stops')renderStops(ct);else renderRoutes(ct);
+}
+
+function renderStops(ct){
+  const f=curDay===0?S:S.filter(s=>s.d===curDay);
+  ct.innerHTML=f.map(s=>{
+    const isM=s.t==='m';const dy=DY.find(d=>d.n===s.d);
+    return`<div class="si${isM?'':' sub'}${activeStop===s.id?' act':''}" data-id="${s.id}" onclick="flyTo('${s.id}')">
+      <div class="sn" style="background:${isM?dy.c:'#D4A373'};${isM?'':'width:18px;height:18px;min-width:18px;font-size:7px'}">${s.id}</div>
+      <div><h3>${s.n}</h3><p>${s.s}</p></div>
+    </div>`;
+  }).join('');
+}
+
+function renderRoutes(ct){
+  const segs=[];let tot=0;
+  for(let i=0;i<MS.length-1;i++){
+    const a=MS[i],b=MS[i+1],d=hav(a.la,a.lo,b.la,b.lo);
+    const t=Math.round(d/40*60);
+    segs.push({a,b,d:d.toFixed(1),t});tot+=d;
+  }
+  ct.innerHTML=`<div class="rtot">Distance totale : ${tot.toFixed(0)} km (vol d'oiseau)</div>`
+    +segs.map((sg,i)=>{
+      const dy=DY.find(d=>d.n===sg.a.d);
+      return`<div class="rc" onclick="showSeg('${sg.a.id}','${sg.b.id}')">
+        <div class="ri" style="background:${dy.c}18;color:${dy.c}">${i+1}</div>
+        <div>
+          <h4>${sg.a.n} vers ${sg.b.n}</h4>
+          <p>${dy.l} | ${sg.a.al} m vers ${sg.b.al} m</p>
+          <div class="dst">${sg.d} km, environ ${sg.t} min</div>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function showSeg(aId,bId){
+  const a=mkrs[aId]?.s,b=mkrs[bId]?.s;
+  if(!a||!b)return;
+  map.fitBounds([[a.la,a.lo],[b.la,b.lo]],{padding:[80,340],maxZoom:11});
+  setTimeout(()=>mkrs[aId].m.openPopup(),400);
+}
+
+// ══════════ INIT ══════════
+const fb=document.getElementById('fltBox');
+const ab=document.createElement('button');ab.className='fbtn on';ab.textContent='Tous';ab.dataset.d='0';ab.onclick=()=>setDay(0);fb.appendChild(ab);
+DY.forEach(d=>{
+  const b=document.createElement('button');b.className='fbtn';b.textContent=d.l;b.dataset.d=d.n;
+  b.style.borderColor=d.c;b.style.color=d.c;b.onclick=()=>setDay(d.n);fb.appendChild(b);
+});
+render();
+</script>
+</body>
+</html>
